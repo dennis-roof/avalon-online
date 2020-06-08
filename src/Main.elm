@@ -235,7 +235,6 @@ type Msg
   | Vote Bool
   | ChooseTraitor Int
   | ChooseOutcome Bool
-  | AiChooseOutcome
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -325,13 +324,29 @@ update msg model =
           ( \player -> aiVoteTeam model.leader player.index model.players ) 
           ( List.filter ( \player -> player.index > 0 ) model.players )
         success = List.sum ( List.map ( \currentVote -> if currentVote then 1 else 0 ) votes ) > ( toFloat ( List.length votes ) / 2 )
+        isPlayerInTeam = List.member 0 ( List.map ( \player -> player.index ) ( List.filter ( \player -> player.selected ) model.players ) )
       in
-        ( { model
-          | players = List.map2 ( \playerVote player -> { player | vote = playerVote } ) votes model.players
-          , teamAllowed = success
-          , round = if success then 4 else 3
-          , voteTrack = if not success then model.voteTrack + 1 else 0
-          }
+        ( 
+          if not success || isPlayerInTeam
+          then
+            { model
+            | players = List.map2 ( \playerVote player -> { player | vote = playerVote } ) votes model.players
+            , teamAllowed = success
+            , round = if success then 4 else 3
+            , voteTrack = if not success then model.voteTrack + 1 else 0
+            }
+          else
+            assignOutcomes
+            { model
+            | players = List.map2 ( \playerVote player -> { player | vote = playerVote } ) votes model.players
+            , teamAllowed = True
+            , round = 1
+            , voteTrack = 0
+            }
+            ( List.map 
+              ( \player -> aiChooseMissionOutcome player.index model ) 
+              ( List.filter ( \player -> player.selected ) model.players )
+            )
         , Cmd.none
         )
     
@@ -365,16 +380,6 @@ update msg model =
           List.map 
           ( \player -> aiChooseMissionOutcome player.index model )
           ( List.filter ( \player -> player.index > 0 && player.selected ) model.players )
-        )
-      , Cmd.none
-      )
-    
-    AiChooseOutcome -> 
-      ( assignOutcomes
-        model
-        ( List.map 
-          ( \player -> aiChooseMissionOutcome player.index model ) 
-          ( List.filter ( \player -> player.selected ) model.players )
         )
       , Cmd.none
       )

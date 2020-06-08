@@ -61,7 +61,7 @@ showRoundText : Int -> String
 showRoundText round =
   case round of
     1 -> "Who will you take with you on your mission?"
-    2 -> "Vote on the current team."
+    2 -> "Vote on the selected team."
     3 -> "Do you wish to point out a possible traitor?"
     4 -> "Choose your mission outcome."
     _ -> "Something went wrong, game ended."
@@ -445,30 +445,25 @@ showTeamScreen model =
       , 
         if model.isTraitor
         then div []
-          [ p [] [ text "You are a traitor." ]
+          [ p [ classes "red fw7" ] [ text "You are a traitor. You can see the other traitors." ]
           , p [] [ text "Fail the majority of missions to win this game. Try to not to be suspected as traitor." ]
-          , p [] 
-            [ text
-              ( "The traitors are: " ++ String.join ", " 
-                ( 
-                  List.map 
-                  ( \player -> player.name ) 
-                  ( List.filter ( \player -> player.isTraitor ) model.players ) 
-                )
-              )
-            ]
           ]
         else
           div [] 
-            [ p [] [ text "You are loyal." ]
+            [ p [ classes "dark-green fw7" ] [ text "You are loyal." ]
             , p [] [ text "Succeed the majority of missions to win this game. Beware of 2 hidden traitors." ]
             ]
       , div []
         ( List.indexedMap 
-          ( \missionIndex outcome -> p [] [ text ( "Mission " ++ String.fromInt ( missionIndex + 1 ) ++ ": " ++ if outcome then "Success" else "Fail" ) ] ) 
+          ( \missionIndex outcome -> div [ classes "dib ma3 ba ph2" ] 
+            [ h3 [ classes "f5" ] [ text ( "Mission " ++ String.fromInt ( missionIndex + 1 ) ) ]
+            , p [ classes ( if outcome then "dark-green" else "red") ] 
+                [ text ( if outcome then "Success" else "Fail" ) ]
+            ]
+          ) 
           model.missionOutcomes
         )
-      , p [] 
+      , p [ classes "cb" ] 
         [ text
           ( 
             (
@@ -481,45 +476,45 @@ showTeamScreen model =
             ) ++ " is the current leader."
           )
         ]
-      , p [] [ text ( showRoundText model.round ) ]
+      , p [ classes "fw8 mt4" ] [ text ( showRoundText model.round ) ]
       , if model.round == 2
         then div []
-          [ div [] [ button [ onClick ( Vote True ) ] [ text "Agree" ] ]
-          , div [] [ button [ onClick ( Vote False ) ] [ text "Disagree" ] ]
+          [ button [ classes "ma2", onClick ( Vote True ) ] [ text "Agree" ]
+          , button [ classes "ma2", onClick ( Vote False ) ] [ text "Disagree" ]
           ]
         else span [] []
       , if model.round == 4
         then div []
-          [ div [] [ button [ onClick ( ChooseOutcome True ) ] [ text "Success!" ] ]
-          , div [] [ button [ onClick ( ChooseOutcome True ) ] [ text "Fail!" ] ]
+          [ button [ classes "ma2", onClick ( ChooseOutcome True ) ] [ text "Success!" ]
+          , button [ classes "ma2", onClick ( ChooseOutcome True ) ] [ text "Fail!" ]
           ]
         else span [] []
       ]
       ( showTeamMembers model )
     )
 
--- round 1 -> "Who will you take with you on your mission?"
--- round 2 -> "Vote on the current team."
--- round 3 -> "Do you wish to point out a possible traitor?"
--- round 4 -> "Choose your mission outcome."
-
 showTeamMembers : Model -> List (Html Msg)
 showTeamMembers model =
   List.indexedMap 
-  ( \index player -> div [ classes "dib ma5" ] 
-    [ p [] [ text ( if index == 0 then model.name else player.name ) ]
-    , if model.leader == index then p [] [ text "leader" ] else span [] []
+  ( \index player -> div [ classes "dib ma4 ba ph2 w-10" ] 
+    [ h3 [ classes "f4" ] [ text ( if index == 0 then model.name else player.name ) ]
+    , if model.leader == index then span []
+        [ p [ classes "fw5" ] [ i [ classes "fa fa-star gold" ] [], text " Leader" ] ]
+      else p [ classes "white" ] [ text "-" ]
     , if player.selected
-      then p [] [ text "team member" ]
+      then p [] [ i [ classes "fa fa-group green" ] [], text " selected" ]
       else
         if model.round == 1 && model.leader == 0 && getTeamSize model.players < getMaxTeamSize model.mission
-        then div [] [ button [ onClick ( SelectTeamMember index ) ] [ text "Select" ] ]
-        else span [] []
+        then button [ classes "db mv2 center", onClick ( SelectTeamMember index ) ] [ text "Select" ]
+        else p [ classes "white" ] [ text "-" ]
     , if model.round == 3 || model.round == 4
       then p [] [ text ( if player.vote then "Vote: Agreed" else "Vote: Disagreed" ) ]
       else span [] []
+    , if model.isTraitor && player.isTraitor
+      then p [ classes "gray" ] [ text "hidden traitor" ]
+      else p [ classes "white" ] [ text "-" ]
     , if model.round == 3
-      then div [] [ button [ onClick ( ChooseTraitor index ) ] [ text "Traitor!" ] ]
+      then button [ classes "db mv2 center", onClick ( ChooseTraitor index ) ] [ text "Accuse" ]
       else span [] []
     ]
   )

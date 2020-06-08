@@ -105,15 +105,14 @@ aiAssignTeam leader mission players =
 aiVoteTeam : Int -> Int -> List Player -> Bool
 aiVoteTeam leader playerIndex players =
   let
-    hasFailedMissions = List.length ( List.filter ( \player -> player.failedMissions > 0 ) players ) > 0
-    selectedAverageFailures = 
-      toFloat ( List.sum ( List.map ( \player -> player.failedMissions ) ( List.filter ( \player -> player.selected ) players ) ) )
-      / toFloat ( List.length players )
-    totalAverageFailures = 
-      toFloat ( List.sum ( List.map ( \player -> player.failedMissions ) players ) ) 
-      / toFloat ( List.length ( List.filter ( \player -> player.selected ) players ) )
+    selectedPlayers = List.filter ( \player -> player.selected ) players
+    hasFailedMissions = List.length ( List.filter ( \player -> player.failedMissions > 0 ) selectedPlayers ) > 0
+    teamAverageFailures = 
+      toFloat ( List.sum ( List.map ( \player -> player.failedMissions ) selectedPlayers ) ) / toFloat ( List.length selectedPlayers )
+    groupAverageFailures = 
+      toFloat ( List.sum ( List.map ( \player -> player.failedMissions ) players ) ) / toFloat ( List.length players )
   in
-    playerIndex == leader || not hasFailedMissions || ( selectedAverageFailures > totalAverageFailures )
+    playerIndex == leader || not hasFailedMissions || ( teamAverageFailures > groupAverageFailures )
 
 
 aiChoosePossibleTraitor : Int -> List Player -> Int

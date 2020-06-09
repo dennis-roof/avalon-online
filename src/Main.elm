@@ -360,7 +360,16 @@ update msg model =
           if not success || isPlayerInTeam
           then
             { model
-            | players = List.map2 ( \playerVote player -> { player | vote = playerVote } ) votes model.players
+            | players =
+                List.map2
+                ( \playerVote player ->
+                  { player
+                  | vote = playerVote
+                  , suspicions = if playerVote then player.suspicions else player.suspicions + 1
+                  }
+                )
+                votes
+                model.players
             , teamAllowed = success
             , round = if success then 4 else 3
             , voteTrack = if not success then model.voteTrack + 1 else 0

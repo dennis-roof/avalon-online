@@ -271,7 +271,12 @@ update msg model =
       )
     
     InitializeGame ->
-      ( model
+      ( { model
+        | mission = 1
+        , round = 1
+        , voteTrack = 1
+        , missionOutcomes = []
+        }
       , Random.generate AssignRoles (Random.list 2 (Random.int 0 4))
       )
 

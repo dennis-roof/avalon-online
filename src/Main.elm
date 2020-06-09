@@ -184,10 +184,10 @@ updatePlayerOutcomes success players =
 assignOutcomes : Model -> List Bool -> Model
 assignOutcomes model outcomes =
   let
-    success = 
-      List.length ( List.filter ( \currentOutcome -> currentOutcome ) outcomes ) 
-      > List.length ( List.filter ( \currentOutcome -> not currentOutcome ) outcomes )
+    success = ( List.length ( List.filter ( \currentOutcome -> currentOutcome == False ) outcomes ) ) == 0
     nextLeader = if model.leader + 1 >= List.length model.players then 0 else model.leader + 1
+    dummy1 = Debug.log "outcomes" outcomes
+    dummy2 = Debug.log "success" success
   in
     { model 
       | players =

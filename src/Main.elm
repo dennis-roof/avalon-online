@@ -134,9 +134,8 @@ updateSuspicions players suspicionIndexes =
   List.map
   ( \player -> 
     { player
-    | suspicions = 
-      player.suspicions 
-      + List.length ( List.filter ( \index -> index == player.index ) suspicionIndexes )
+    | accuses = List.sum ( List.indexedMap ( \index accusedIndex -> if index == player.index then accusedIndex else 0 ) suspicionIndexes )
+    , suspicions = player.suspicions + List.length ( List.filter ( \index -> index == player.index ) suspicionIndexes )
     } 
   )
   players
@@ -564,6 +563,23 @@ showTeamMembers model =
       else p [ classes "white" ] [ text "-" ]
     , if model.round == 3
       then button [ classes "db mv2 center", onClick ( ChooseTraitor index ) ] [ text "Accuse" ]
+      else span [] []
+    , if model.round == 1 && player.accuses /= -1
+      then div []
+        [ div [] [ text "Accuses:" ]
+        , div []
+          [
+            text
+            ( String.concat
+              ( List.map ( \accused -> accused.name )
+                ( List.filter
+                  ( \accusedPlayer -> player.accuses == accusedPlayer.index )
+                  model.players
+                )
+              )
+            )
+          ]
+        ]
       else span [] []
     ]
   )

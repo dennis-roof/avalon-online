@@ -145,11 +145,14 @@ updateSuspicions players suspicionIndexes =
 aiChooseMissionOutcome : Int -> Model -> Bool
 aiChooseMissionOutcome playerIndex model =
   let
-    isTraitor = List.member True ( List.indexedMap ( \index player -> if player.index == index then player.isTraitor else False ) model.players )
+    selectedPlayers = List.filter ( \player -> player.selected ) model.players
+    isTraitor = List.member True ( List.map ( \player -> if player.index == playerIndex then player.isTraitor else False ) selectedPlayers )
     numberOfSuspicions = 
-      List.sum ( List.indexedMap ( \index player -> if index == playerIndex then player.suspicions else 0 ) model.players )
+      List.sum ( List.indexedMap ( \index player -> if index == playerIndex then player.suspicions else 0 ) selectedPlayers )
     totalAverageSuspicions = 
       List.sum ( List.map ( \player -> player.suspicions ) model.players )
+    dummy0 = Debug.log "Traitors" ( List.map ( \player -> player.isTraitor ) model.players )
+    dummy1 = Debug.log ("selected player " ++ String.fromInt playerIndex) (if isTraitor then "is a traitor" else "is not a traitor")
   in
     if not isTraitor || model.mission == 1
     then True
@@ -157,7 +160,10 @@ aiChooseMissionOutcome playerIndex model =
       if model.mission == 5
       then False
       else
-        ( numberOfSuspicions < totalAverageSuspicions )
+        if model.mission > 2 && ( List.length ( List.filter ( \outcome -> outcome ) model.missionOutcomes ) ) == 2
+        then False
+        else
+          (model.mission == 4) || ( numberOfSuspicions < totalAverageSuspicions )
 
 
 updatePlayerOutcomes : Bool -> List Player -> List Player

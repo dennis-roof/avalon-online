@@ -192,6 +192,22 @@ assignOutcomes model outcomes =
     }
 
 
+hasGameEnded : Model -> Bool
+hasGameEnded model =
+  ( List.length ( List.filter ( \outcome -> outcome == True ) model.missionOutcomes ) ) == 3
+  || ( List.length ( List.filter ( \outcome -> outcome == False ) model.missionOutcomes ) ) == 3
+
+
+hasPlayerWon : Model -> Bool
+hasPlayerWon model =
+  ( List.length 
+    ( List.filter 
+      ( \outcome -> outcome == ( if model.isTraitor then False else True ) ) 
+      model.missionOutcomes 
+    )
+  ) == 3
+
+
 -- MODEL
 
 
@@ -423,7 +439,10 @@ showScreen : Model -> Html Msg
 showScreen model =
   case model.mission of
     0 -> showStartScreen model
-    _ -> showTeamScreen model
+    _ ->
+      if hasGameEnded model
+      then showEndScreen model
+      else showTeamScreen model
 
 
 showStartScreen : Model -> Html Msg
@@ -443,8 +462,7 @@ showTeamScreen model =
     ( 
       List.append
       [ h1 [ classes "f2 fw3" ] [ text ( "Mission " ++ String.fromInt model.mission ++ " out of 5" ) ]
-      , 
-        if model.isTraitor
+      , if model.isTraitor
         then div []
           [ p [ classes "red fw7" ] [ text "You are a traitor. You can see the other traitors." ]
           , p [] [ text "Fail the majority of missions to win this game. Try to not to be suspected as traitor." ]
@@ -493,6 +511,15 @@ showTeamScreen model =
       ]
       ( showTeamMembers model )
     )
+
+
+showEndScreen : Model -> Html Msg
+showEndScreen model =
+  div []
+    [ h1 [] [ text ( if hasPlayerWon model then "Congratulations! You have won!" else "You have lost." ) ]
+    , showMissionStatus model
+    , div [ classes "ma3" ] [ button [ onClick InitializeGame ] [ text "New Game" ] ]
+    ]
 
 showTeamMembers : Model -> List (Html Msg)
 showTeamMembers model =

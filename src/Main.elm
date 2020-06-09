@@ -112,8 +112,12 @@ aiVoteTeam leader playerIndex players =
       toFloat ( List.sum ( List.map ( \player -> player.failedMissions ) selectedPlayers ) ) / toFloat ( List.length selectedPlayers )
     groupAverageFailures = 
       toFloat ( List.sum ( List.map ( \player -> player.failedMissions ) players ) ) / toFloat ( List.length players )
+    dummy1 = Debug.log "teamAverageFailures" teamAverageFailures
+    dummy2 = Debug.log "groupAverageFailures" groupAverageFailures
+    dummy3 = Debug.log "decision" ( teamAverageFailures > groupAverageFailures )
+    dummy4 = Debug.log "full decision" ( playerIndex == leader || not hasFailedMissions || ( teamAverageFailures > groupAverageFailures ) )
   in
-    playerIndex == leader || not hasFailedMissions || ( teamAverageFailures > groupAverageFailures )
+    playerIndex == leader || not hasFailedMissions || ( teamAverageFailures <= groupAverageFailures )
 
 
 aiChoosePossibleTraitor : Int -> List Player -> Int

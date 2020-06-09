@@ -372,7 +372,7 @@ update msg model =
                 model.players
             , teamAllowed = success
             , round = if success then 4 else 3
-            , voteTrack = if not success then model.voteTrack + 1 else 0
+            , voteTrack = if not success then model.voteTrack + 1 else 1
             }
           else
             assignOutcomes
@@ -380,7 +380,7 @@ update msg model =
             | players = List.map2 ( \playerVote player -> { player | vote = playerVote } ) votes model.players
             , teamAllowed = True
             , round = 1
-            , voteTrack = 0
+            , voteTrack = 1
             }
             ( List.map 
               ( \player -> aiChooseMissionOutcome player.index model ) 
@@ -396,7 +396,7 @@ update msg model =
           ( \player -> aiChoosePossibleTraitor player.index model.players )
           ( List.filter ( \player -> player.index > 0 ) model.players )
         nextLeader = if model.leader + 1 >= List.length model.players then 0 else model.leader + 1
-        nextMission = if model.voteTrack == 6 then model.mission + 1 else model.mission
+        nextMission = if model.voteTrack > 5 then model.mission + 1 else model.mission
       in
         ( { model 
           | players =
@@ -406,8 +406,8 @@ update msg model =
           , mission = nextMission
           , leader = nextLeader
           , round = if nextLeader == 0 then 1 else 2
-          , voteTrack = if model.voteTrack == 6 then 1 else model.voteTrack
-          , missionOutcomes = if model.voteTrack == 6 then model.missionOutcomes ++ [ False ] else model.missionOutcomes
+          , voteTrack = if model.voteTrack > 5 then 1 else model.voteTrack
+          , missionOutcomes = if model.voteTrack > 5 then model.missionOutcomes ++ [ False ] else model.missionOutcomes
           }
         , Cmd.none
         )
@@ -496,6 +496,8 @@ showTeamScreen model =
             , p [] [ text "Succeed the majority of missions to win this game. Beware of 2 hidden traitors." ]
             ]
       , showMissionStatus model
+      , p [] [ text ( "The next mission will fail if the team can't agree on a team in 5 vote rounds." ) ]
+      , p [] [ text ( "Vote round " ++ String.fromInt model.voteTrack ++ " out of 5." ) ]
       , p [ classes "cb" ] 
         [ text
           ( 

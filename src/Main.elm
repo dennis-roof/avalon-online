@@ -31,6 +31,7 @@ type alias Player =
   , selected: Bool
   , vote: Bool
   , failedMissions: Int
+  , accuses: Int
   , suspicions: Int
   }
 
@@ -49,11 +50,11 @@ classes classNames =
 
 initPlayers : List Player
 initPlayers =
-  [ { index = 0, name = "Player", isTraitor = False, selected = False, vote = False, failedMissions = 0, suspicions = 0 }
-  , { index = 1, name = "Mary", isTraitor = False, selected = False, vote = False, failedMissions = 0, suspicions = 0 }
-  , { index = 2, name = "Robert", isTraitor = False, selected = False, vote = False, failedMissions = 0, suspicions = 0 }
-  , { index = 3, name = "Jennifer", isTraitor = False, selected = False, vote = False, failedMissions = 0, suspicions = 0 }
-  , { index = 4, name = "David", isTraitor = False, selected = False, vote = False, failedMissions = 0, suspicions = 0 }
+  [ { index = 0, name = "Player", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { index = 1, name = "Mary", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { index = 2, name = "Robert", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { index = 3, name = "Jennifer", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { index = 4, name = "David", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
   ]
 
 

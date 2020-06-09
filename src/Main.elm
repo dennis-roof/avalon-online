@@ -472,16 +472,7 @@ showTeamScreen model =
             [ p [ classes "dark-green fw7" ] [ text "You are loyal." ]
             , p [] [ text "Succeed the majority of missions to win this game. Beware of 2 hidden traitors." ]
             ]
-      , div []
-        ( List.indexedMap 
-          ( \missionIndex outcome -> div [ classes "dib ma3 ba ph2" ] 
-            [ h3 [ classes "f5" ] [ text ( "Mission " ++ String.fromInt ( missionIndex + 1 ) ) ]
-            , p [ classes ( if outcome then "dark-green" else "red") ] 
-                [ text ( if outcome then "Success" else "Fail" ) ]
-            ]
-          ) 
-          model.missionOutcomes
-        )
+      , showMissionStatus model
       , p [ classes "cb" ] 
         [ text
           ( 
@@ -520,6 +511,21 @@ showEndScreen model =
     , showMissionStatus model
     , div [ classes "ma3" ] [ button [ onClick InitializeGame ] [ text "New Game" ] ]
     ]
+
+
+showMissionStatus : Model -> Html Msg
+showMissionStatus model =
+  div 
+  []
+  ( List.indexedMap 
+    ( \missionIndex outcome -> div [ classes "dib ma3 ba ph2" ] 
+      [ h3 [ classes "f5" ] [ text ( "Mission " ++ String.fromInt ( missionIndex + 1 ) ) ]
+      , p [ classes ( if outcome then "dark-green" else "red") ] 
+          [ text ( if outcome then "Success" else "Fail" ) ]
+      ]
+    ) 
+    model.missionOutcomes
+  )
 
 showTeamMembers : Model -> List (Html Msg)
 showTeamMembers model =

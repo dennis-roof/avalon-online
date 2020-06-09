@@ -521,7 +521,7 @@ showTeamScreen model =
       , if model.round == 4
         then div []
           [ button [ classes "ma2", onClick ( ChooseOutcome True ) ] [ text "Success!" ]
-          , button [ classes "ma2", onClick ( ChooseOutcome True ) ] [ text "Fail!" ]
+          , button [ classes "ma2", onClick ( ChooseOutcome False ) ] [ text "Fail!" ]
           ]
         else span [] []
       ]

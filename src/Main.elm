@@ -42,9 +42,9 @@ type alias Player =
 classes : String -> Attribute msg
 classes classNames = 
   classList
-  ( List.map 
-    ( \className -> ( className, True ) ) 
-    ( String.split " " classNames )
+  ( classNames
+    |> String.split " "
+    |> List.map ( \className -> ( className, True ) )
   )
 
 
@@ -87,13 +87,10 @@ aiAssignTeam : Int -> Int -> List Player -> List Player
 aiAssignTeam leader mission players =
   let
     isTraitor : Bool
-    isTraitor = 
-      List.member
-      True 
-      ( List.indexedMap 
-        ( \index player -> if player.index == index then player.isTraitor else False ) 
-        players
-      )
+    isTraitor =
+      players
+      |> List.indexedMap ( \index player -> if player.index == index then player.isTraitor else False )
+      |> List.member True
     
     selectedIndexes : List Int
     selectedIndexes =
@@ -101,8 +98,11 @@ aiAssignTeam leader mission players =
         List.map 
         .index
         ( List.take 
-          ( ( getMaxTeamSize mission ) - 1 ) 
-          ( List.sortBy .failedMissions ( List.filter ( \player -> player.index /= leader ) players ) )
+          ( ( getMaxTeamSize mission ) - 1 )
+          ( players
+            |> List.filter ( \player -> player.index /= leader )
+            |> List.sortBy .failedMissions
+          )
         )
   
   in
@@ -120,11 +120,11 @@ aiVoteTeam leader playerIndex players =
     
     teamAverageFailures : Float
     teamAverageFailures = 
-      toFloat ( List.sum ( List.map .failedMissions selectedPlayers ) ) / toFloat ( List.length selectedPlayers )
+      ( toFloat << List.sum << List.map .failedMissions ) selectedPlayers / ( toFloat << List.length ) selectedPlayers
     
     groupAverageFailures : Float
     groupAverageFailures = 
-      toFloat ( List.sum ( List.map .failedMissions players ) ) / toFloat ( List.length players )
+      ( toFloat << List.sum << List.map .failedMissions ) players / ( toFloat << List.length ) players
   
   in
     playerIndex == leader || not hasFailedMissions || ( teamAverageFailures <= groupAverageFailures )
@@ -133,10 +133,9 @@ aiVoteTeam leader playerIndex players =
 aiChoosePossibleTraitor : Int -> List Player -> Int
 aiChoosePossibleTraitor playerIndex players =
   List.sum
-    ( List.indexedMap
-      ( \index player -> if player.index /= playerIndex && index == 0 then player.index else if index == 1 then player.index else 0 ) 
-      ( List.reverse ( List.sortBy .failedMissions ( List.filter ( \player -> player.selected ) players ) ) )
-    )
+    <| List.indexedMap
+       ( \index player -> if player.index /= playerIndex && index == 0 then player.index else if index == 1 then player.index else 0 ) 
+       ( ( List.reverse << List.sortBy .failedMissions << List.filter ( \player -> player.selected ) ) players )
 
 
 updateSuspicions : List Player -> List Int -> List Player
@@ -144,7 +143,7 @@ updateSuspicions players suspicionIndexes =
   List.map
   ( \player -> 
     { player
-    | accuses = List.sum ( List.indexedMap ( \index accusedIndex -> if index == player.index then accusedIndex else 0 ) suspicionIndexes )
+    | accuses = List.sum <| List.indexedMap ( \index accusedIndex -> if index == player.index then accusedIndex else 0 ) suspicionIndexes
     , suspicions = player.suspicions + List.length ( List.filter ( \index -> index == player.index ) suspicionIndexes )
     } 
   )
@@ -155,18 +154,21 @@ aiChooseMissionOutcome : Int -> Model -> Bool
 aiChooseMissionOutcome playerIndex model =
   let
     selectedPlayers : List Player
-    selectedPlayers = List.filter ( \player -> player.selected ) model.players
+    selectedPlayers = List.filter .selected model.players
     
     isTraitor : Bool
-    isTraitor = List.member True ( List.map ( \player -> if player.index == playerIndex then player.isTraitor else False ) selectedPlayers )
+    isTraitor =
+      selectedPlayers
+      |> List.map ( \player -> if player.index == playerIndex then player.isTraitor else False )
+      |> List.member True
     
     numberOfSuspicions : Float
     numberOfSuspicions = 
-      toFloat ( List.sum ( List.indexedMap ( \index player -> if index == playerIndex then player.suspicions else 0 ) selectedPlayers ) )
+      ( toFloat << List.sum << List.indexedMap ( \index player -> if index == playerIndex then player.suspicions else 0 ) ) selectedPlayers
     
     averageGroupSuspicions : Float
     averageGroupSuspicions = 
-      toFloat ( List.sum ( List.map .suspicions model.players ) ) / toFloat ( List.length model.players )
+      ( toFloat << List.sum << List.map .suspicions ) model.players / ( toFloat << List.length ) model.players
   
   in
     if not isTraitor || model.mission == 1
@@ -175,7 +177,7 @@ aiChooseMissionOutcome playerIndex model =
       if model.mission == 5
       then False
       else
-        if model.mission > 2 && ( List.length ( List.filter ( \outcome -> outcome ) model.missionOutcomes ) ) == 2
+        if model.mission > 2 && ( List.length << List.filter ( \outcome -> outcome ) ) model.missionOutcomes == 2
         then False
         else
           (model.mission == 4) || ( numberOfSuspicions < averageGroupSuspicions )
@@ -201,7 +203,7 @@ assignOutcomes : Model -> List Bool -> Model
 assignOutcomes model outcomes =
   let
     success : Bool
-    success = ( List.length ( List.filter ( \currentOutcome -> currentOutcome == False ) outcomes ) ) == 0
+    success = ( List.length << List.filter ( \currentOutcome -> currentOutcome == False ) ) outcomes == 0
     
     nextLeader : Int
     nextLeader = if model.leader + 1 >= List.length model.players then 0 else model.leader + 1
@@ -221,8 +223,8 @@ assignOutcomes model outcomes =
 
 hasGameEnded : Model -> Bool
 hasGameEnded model =
-  ( List.length ( List.filter ( \outcome -> outcome == True ) model.missionOutcomes ) ) == 3
-  || ( List.length ( List.filter ( \outcome -> outcome == False ) model.missionOutcomes ) ) == 3
+  ( List.length << List.filter ( \outcome -> outcome == True ) ) model.missionOutcomes == 3
+  || ( List.length << List.filter ( \outcome -> outcome == False ) ) model.missionOutcomes == 3
 
 
 hasPlayerWon : Model -> Bool
@@ -354,18 +356,18 @@ update msg model =
           then
             { model 
             | players = 
-              List.map ( \player -> if player.index == playerIndex then { player | selected = True } else player ) model.players
+              List.map 
+              ( \player -> if player.index == playerIndex then { player | selected = True } else player ) 
+              model.players
             , round = if finishedSelection then 2 else 1
             }
           else
             ( assignOutcomes
               model
-              ( List.map 
-                ( \player -> aiChooseMissionOutcome player.index model ) 
-                ( List.filter 
-                  .selected
-                  ( List.map ( \player -> if player.index == playerIndex then { player | selected = True } else player ) model.players )
-                )
+              ( model.players
+                |> List.map ( \player -> if player.index == playerIndex then { player | selected = True } else player )
+                |> List.filter .selected
+                |> List.map ( \player -> aiChooseMissionOutcome player.index model )
               )
             )
         , Cmd.none
@@ -374,16 +376,21 @@ update msg model =
     Vote vote -> 
       let
         votes : List Bool
-        votes = vote :: 
-          List.map 
-          ( \player -> aiVoteTeam model.leader player.index model.players ) 
-          ( List.filter ( \player -> player.index > 0 ) model.players )
+        votes = vote ::
+          ( model.players
+            |> List.filter ( \player -> player.index > 0 )
+            |> List.map ( \player -> aiVoteTeam model.leader player.index model.players )
+          )
         
         success : Bool
-        success = List.sum ( List.map ( \currentVote -> if currentVote then 1 else 0 ) votes ) > ( toFloat ( List.length votes ) / 2 )
+        success = ( List.sum << List.map ( \currentVote -> if currentVote then 1 else 0 ) ) votes > ( toFloat ( List.length votes ) / 2 )
         
         isPlayerInTeam : Bool
-        isPlayerInTeam = List.member 0 ( List.map .index ( List.filter .selected model.players ) )
+        isPlayerInTeam = 
+          model.players
+          |> List.filter .selected
+          |> List.map .index
+          |> List.member 0
       
       in
         ( 
@@ -412,9 +419,9 @@ update msg model =
             , round = 1
             , voteTrack = 1
             }
-            ( List.map 
-              ( \player -> aiChooseMissionOutcome player.index model ) 
-              ( List.filter ( \player -> player.selected ) model.players )
+            ( model.players
+              |> List.filter ( \player -> player.selected )
+              |> List.map ( \player -> aiChooseMissionOutcome player.index model )
             )
         , Cmd.none
         )
@@ -423,9 +430,10 @@ update msg model =
       let
         suspicionIndexes : List Int
         suspicionIndexes = suspicionIndex ::
-          List.map 
-          ( \player -> aiChoosePossibleTraitor player.index model.players )
-          ( List.filter ( \player -> player.index > 0 ) model.players )
+          ( model.players
+            |> List.filter ( \player -> player.index > 0 )
+            |> List.map ( \player -> aiChoosePossibleTraitor player.index model.players )
+          )
         
         nextLeader : Int
         nextLeader = if model.leader + 1 >= List.length model.players then 0 else model.leader + 1
@@ -451,10 +459,11 @@ update msg model =
     ChooseOutcome outcome -> 
       ( assignOutcomes
         model
-        ( outcome :: 
-          List.map 
-          ( \player -> aiChooseMissionOutcome player.index model )
-          ( List.filter ( \player -> player.index > 0 && player.selected ) model.players )
+        ( outcome ::
+          ( model.players
+            |> List.filter ( \player -> player.index > 0 && player.selected )
+            |> List.map ( \player -> aiChooseMissionOutcome player.index model )
+          )
         )
       , Cmd.none
       )

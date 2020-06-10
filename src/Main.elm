@@ -86,7 +86,16 @@ getTeamSize players = List.length ( List.filter ( \player -> player.selected ) p
 aiAssignTeam : Int -> Int -> List Player -> List Player
 aiAssignTeam leader mission players =
   let
-    isTraitor = List.member True ( List.indexedMap ( \index player -> if player.index == index then player.isTraitor else False ) players )
+    isTraitor : Bool
+    isTraitor = 
+      List.member
+      True 
+      ( List.indexedMap 
+        ( \index player -> if player.index == index then player.isTraitor else False ) 
+        players
+      )
+    
+    selectedIndexes : List Int
     selectedIndexes =
       [ leader ] ++
         List.map 
@@ -95,10 +104,7 @@ aiAssignTeam leader mission players =
           ( ( getMaxTeamSize mission ) - 1 ) 
           ( List.sortBy .failedMissions ( List.filter ( \player -> player.index /= leader ) players ) )
         )
-    dummy0 = Debug.log "Mission" mission
-    dummy1 = Debug.log "Max team size" ( getMaxTeamSize mission )
-    dummy2 = Debug.log "selected indexes" selectedIndexes
-    dummy3 = Debug.log "leader index" leader
+  
   in
     List.indexedMap ( \index player -> { player | selected = ( List.member index selectedIndexes ) } ) players
 
@@ -106,16 +112,20 @@ aiAssignTeam leader mission players =
 aiVoteTeam : Int -> Int -> List Player -> Bool
 aiVoteTeam leader playerIndex players =
   let
+    selectedPlayers : List Player
     selectedPlayers = List.filter ( \player -> player.selected ) players
+    
+    hasFailedMissions : Bool
     hasFailedMissions = List.length ( List.filter ( \player -> player.failedMissions > 0 ) selectedPlayers ) > 0
+    
+    teamAverageFailures : Float
     teamAverageFailures = 
       toFloat ( List.sum ( List.map ( \player -> player.failedMissions ) selectedPlayers ) ) / toFloat ( List.length selectedPlayers )
+    
+    groupAverageFailures : Float
     groupAverageFailures = 
       toFloat ( List.sum ( List.map ( \player -> player.failedMissions ) players ) ) / toFloat ( List.length players )
-    dummy1 = Debug.log "teamAverageFailures" teamAverageFailures
-    dummy2 = Debug.log "groupAverageFailures" groupAverageFailures
-    dummy3 = Debug.log "decision" ( teamAverageFailures > groupAverageFailures )
-    dummy4 = Debug.log "full decision" ( playerIndex == leader || not hasFailedMissions || ( teamAverageFailures > groupAverageFailures ) )
+  
   in
     playerIndex == leader || not hasFailedMissions || ( teamAverageFailures <= groupAverageFailures )
 
@@ -144,14 +154,20 @@ updateSuspicions players suspicionIndexes =
 aiChooseMissionOutcome : Int -> Model -> Bool
 aiChooseMissionOutcome playerIndex model =
   let
+    selectedPlayers : List Player
     selectedPlayers = List.filter ( \player -> player.selected ) model.players
+    
+    isTraitor : Bool
     isTraitor = List.member True ( List.map ( \player -> if player.index == playerIndex then player.isTraitor else False ) selectedPlayers )
+    
+    numberOfSuspicions : Float
     numberOfSuspicions = 
-      List.sum ( List.indexedMap ( \index player -> if index == playerIndex then player.suspicions else 0 ) selectedPlayers )
-    totalAverageSuspicions = 
-      List.sum ( List.map ( \player -> player.suspicions ) model.players )
-    dummy0 = Debug.log "Traitors" ( List.map ( \player -> player.isTraitor ) model.players )
-    dummy1 = Debug.log ("selected player " ++ String.fromInt playerIndex) (if isTraitor then "is a traitor" else "is not a traitor")
+      toFloat ( List.sum ( List.indexedMap ( \index player -> if index == playerIndex then player.suspicions else 0 ) selectedPlayers ) )
+    
+    averageGroupSuspicions : Float
+    averageGroupSuspicions = 
+      toFloat ( List.sum ( List.map ( \player -> player.suspicions ) model.players ) ) / toFloat ( List.length model.players )
+  
   in
     if not isTraitor || model.mission == 1
     then True
@@ -162,7 +178,7 @@ aiChooseMissionOutcome playerIndex model =
         if model.mission > 2 && ( List.length ( List.filter ( \outcome -> outcome ) model.missionOutcomes ) ) == 2
         then False
         else
-          (model.mission == 4) || ( numberOfSuspicions < totalAverageSuspicions )
+          (model.mission == 4) || ( numberOfSuspicions < averageGroupSuspicions )
 
 
 updatePlayerOutcomes : Bool -> List Player -> List Player
@@ -184,10 +200,12 @@ updatePlayerOutcomes success players =
 assignOutcomes : Model -> List Bool -> Model
 assignOutcomes model outcomes =
   let
+    success : Bool
     success = ( List.length ( List.filter ( \currentOutcome -> currentOutcome == False ) outcomes ) ) == 0
+    
+    nextLeader : Int
     nextLeader = if model.leader + 1 >= List.length model.players then 0 else model.leader + 1
-    dummy1 = Debug.log "outcomes" outcomes
-    dummy2 = Debug.log "success" success
+  
   in
     { model 
       | players =
@@ -296,7 +314,9 @@ update msg model =
 
     AssignRoles ( firstTraitor :: otherTraitor ) ->
       let
+        traitorIndexes : List Int
         traitorIndexes = firstTraitor :: if [ firstTraitor ] == otherTraitor then [ firstTraitor + 1 ] else otherTraitor
+      
       in
         ( 
           { model
@@ -322,8 +342,12 @@ update msg model =
     
     SelectTeamMember playerIndex ->
       let
+        finishedSelection : Bool
         finishedSelection = getTeamSize model.players == ( getMaxTeamSize model.mission ) - 1
+        
+        isPlayerInTeam : Bool
         isPlayerInTeam = List.member 0 ( List.map ( \player -> player.index ) ( List.filter ( \player -> player.selected ) model.players ) )
+      
       in
         (
           if not finishedSelection || isPlayerInTeam
@@ -349,12 +373,18 @@ update msg model =
     
     Vote vote -> 
       let
+        votes : List Bool
         votes = vote :: 
           List.map 
           ( \player -> aiVoteTeam model.leader player.index model.players ) 
           ( List.filter ( \player -> player.index > 0 ) model.players )
+        
+        success : Bool
         success = List.sum ( List.map ( \currentVote -> if currentVote then 1 else 0 ) votes ) > ( toFloat ( List.length votes ) / 2 )
+        
+        isPlayerInTeam : Bool
         isPlayerInTeam = List.member 0 ( List.map ( \player -> player.index ) ( List.filter ( \player -> player.selected ) model.players ) )
+      
       in
         ( 
           if not success || isPlayerInTeam
@@ -391,12 +421,18 @@ update msg model =
     
     ChooseTraitor suspicionIndex -> 
       let
+        suspicionIndexes : List Int
         suspicionIndexes = suspicionIndex ::
           List.map 
           ( \player -> aiChoosePossibleTraitor player.index model.players )
           ( List.filter ( \player -> player.index > 0 ) model.players )
+        
+        nextLeader : Int
         nextLeader = if model.leader + 1 >= List.length model.players then 0 else model.leader + 1
+        
+        nextMission : Int
         nextMission = if model.voteTrack > 5 then model.mission + 1 else model.mission
+      
       in
         ( { model 
           | players =

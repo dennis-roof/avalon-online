@@ -25,7 +25,7 @@ main =
 
 
 type alias Player =
-  { index: Int
+  { id: Int
   , name: String
   , isTraitor: Bool
   , selected: Bool
@@ -48,13 +48,18 @@ classes classNames =
   )
 
 
-initPlayers : List Player
-initPlayers =
-  [ { index = 0, name = "Player", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
-  , { index = 1, name = "Mary", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
-  , { index = 2, name = "Robert", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
-  , { index = 3, name = "Jennifer", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
-  , { index = 4, name = "David", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+defaultPlayer : Player
+defaultPlayer =
+  { id = 0, name = "Foobar", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+
+
+initPlayers : String -> List Player
+initPlayers playerName =
+  [ { id = 0, name = playerName, isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { id = 1, name = "Mary", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { id = 2, name = "Robert", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { id = 3, name = "Jennifer", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { id = 4, name = "David", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
   ]
 
 
@@ -80,78 +85,91 @@ getMaxTeamSize mission =
 
 
 getTeamSize : List Player -> Int
-getTeamSize players = List.length ( List.filter ( \player -> player.selected ) players )
+getTeamSize players = List.length ( List.filter .selected players )
+
+
+getPlayer : Int -> List Player -> Player
+getPlayer playerId players =
+  players
+  |> List.filter ( \player -> player.id == playerId )
+  |> List.head
+  |> Maybe.withDefault defaultPlayer
 
 
 aiAssignTeam : Int -> Int -> List Player -> List Player
 aiAssignTeam leader mission players =
   let
+    team : List Int
+    team =
+      players
+      |> List.sortBy ( \player -> if player.id == leader then -1 else player.suspicions )
+      |> List.take ( getMaxTeamSize mission )
+      |> List.map .id
+   
+   in
+    List.map 
+    ( \player -> { player | selected = List.member player.id team } )
+    players
+
+
+aiVoteTeam : Int -> Int -> List Player -> List Bool -> Bool
+aiVoteTeam leader playerId players missionOutcomes =
+  let
     isTraitor : Bool
     isTraitor =
-      players
-      |> List.indexedMap ( \index player -> if player.index == index then player.isTraitor else False )
+      selectedPlayers
+      |> List.map ( \player -> if player.id == leader then player.isTraitor else False )
       |> List.member True
     
-    selectedIndexes : List Int
-    selectedIndexes =
-      [ leader ] ++
-        List.map 
-        .index
-        ( List.take 
-          ( ( getMaxTeamSize mission ) - 1 )
-          ( players
-            |> List.filter ( \player -> player.index /= leader )
-            |> List.sortBy .failedMissions
-          )
-        )
-  
-  in
-    List.indexedMap ( \index player -> { player | selected = ( List.member index selectedIndexes ) } ) players
-
-
-aiVoteTeam : Int -> Int -> List Player -> Bool
-aiVoteTeam leader playerIndex players =
-  let
     selectedPlayers : List Player
-    selectedPlayers = List.filter ( \player -> player.selected ) players
+    selectedPlayers = List.filter .selected players
     
     hasFailedMissions : Bool
-    hasFailedMissions = List.length ( List.filter ( \player -> player.failedMissions > 0 ) selectedPlayers ) > 0
+    hasFailedMissions = List.any ( \player -> player.failedMissions > 0 ) selectedPlayers
     
-    teamAverageFailures : Float
-    teamAverageFailures = 
-      ( toFloat << List.sum << List.map .failedMissions ) selectedPlayers / ( toFloat << List.length ) selectedPlayers
+    teamAverageSuspicions : Float
+    teamAverageSuspicions = 
+      ( toFloat << List.sum << List.map .suspicions ) selectedPlayers / ( toFloat << List.length ) selectedPlayers
     
-    groupAverageFailures : Float
-    groupAverageFailures = 
-      ( toFloat << List.sum << List.map .failedMissions ) players / ( toFloat << List.length ) players
+    groupAverageSuspicions : Float
+    groupAverageSuspicions = 
+      ( toFloat << List.sum << List.map .suspicions ) players / ( toFloat << List.length ) players
   
   in
-    playerIndex == leader || not hasFailedMissions || ( teamAverageFailures <= groupAverageFailures )
-
+    if not isTraitor || List.length ( List.filter ( \outcome -> outcome ) missionOutcomes ) < 2
+    then
+      playerId == leader 
+      || not hasFailedMissions 
+      || ( teamAverageSuspicions <= groupAverageSuspicions )
+    else
+      False
 
 aiChoosePossibleTraitor : Int -> List Player -> Int
-aiChoosePossibleTraitor playerIndex players =
-  List.sum
-    <| List.indexedMap
-       ( \index player -> if player.index /= playerIndex && index == 0 then player.index else if index == 1 then player.index else 0 ) 
-       ( ( List.reverse << List.sortBy .failedMissions << List.filter ( \player -> player.selected ) ) players )
+aiChoosePossibleTraitor playerId players =
+  players
+  |> List.filter ( \player -> player.id /= playerId )
+  |> List.sortBy .failedMissions
+  |> List.map .id
+  |> List.reverse
+  |> List.head
+  |> Maybe.withDefault 0
 
 
 updateSuspicions : List Player -> List Int -> List Player
-updateSuspicions players suspicionIndexes =
+updateSuspicions players suspicionIds =
   List.map
   ( \player -> 
     { player
-    | accuses = List.sum <| List.indexedMap ( \index accusedIndex -> if index == player.index then accusedIndex else 0 ) suspicionIndexes
-    , suspicions = player.suspicions + List.length ( List.filter ( \index -> index == player.index ) suspicionIndexes )
+    | accuses = List.sum <| List.indexedMap ( \id accusedId -> if id == player.id then accusedId else 0 ) suspicionIds
+    , suspicions = player.suspicions + List.length ( List.filter ( \id -> id == player.id ) suspicionIds )
+    , selected = False
     } 
   )
   players
 
 
 aiChooseMissionOutcome : Int -> Model -> Bool
-aiChooseMissionOutcome playerIndex model =
+aiChooseMissionOutcome playerId model =
   let
     selectedPlayers : List Player
     selectedPlayers = List.filter .selected model.players
@@ -159,12 +177,12 @@ aiChooseMissionOutcome playerIndex model =
     isTraitor : Bool
     isTraitor =
       selectedPlayers
-      |> List.map ( \player -> if player.index == playerIndex then player.isTraitor else False )
+      |> List.map ( \player -> if player.id == playerId then player.isTraitor else False )
       |> List.member True
     
     numberOfSuspicions : Float
     numberOfSuspicions = 
-      ( toFloat << List.sum << List.indexedMap ( \index player -> if index == playerIndex then player.suspicions else 0 ) ) selectedPlayers
+      ( toFloat << List.sum << List.indexedMap ( \id player -> if id == playerId then player.suspicions else 0 ) ) selectedPlayers
     
     averageGroupSuspicions : Float
     averageGroupSuspicions = 
@@ -193,6 +211,11 @@ updatePlayerOutcomes success players =
         then player.failedMissions
         else
           if success then player.failedMissions else player.failedMissions + 1
+    , suspicions =
+        if not player.selected 
+        then player.suspicions
+        else
+          if success then player.suspicions - 2 else player.suspicions + 2
     , selected = False
     }
   )
@@ -216,7 +239,7 @@ assignOutcomes model outcomes =
           else aiAssignTeam nextLeader ( model.mission + 1 ) ( updatePlayerOutcomes success model.players )
       , mission = model.mission + 1
       , leader = nextLeader
-      , round = if nextLeader == 0 then 1 else 2
+      , round = if not success then 3 else if nextLeader == 0 then 1 else 2
       , missionOutcomes = model.missionOutcomes ++ [ success ]
     }
 
@@ -257,7 +280,7 @@ init _ =
   ( Model
     "Player"
     False
-    initPlayers
+    ( initPlayers "Player" )
     0
     1
     0
@@ -278,7 +301,7 @@ type Msg
   | AssignLeader Int
   | SelectTeamMember Int
   | Vote Bool
-  | ChooseTraitor Int
+  | ChooseSuspect Int
   | ChooseOutcome Bool
 
 
@@ -291,8 +314,8 @@ update msg model =
         | name = name
         , players =
           List.indexedMap
-          ( \playerIndex player ->
-            { player | name = if playerIndex == 0 then model.name else player.name }
+          ( \playerId player ->
+            { player | name = if playerId == 0 then model.name else player.name }
           )
           model.players
         }
@@ -301,7 +324,8 @@ update msg model =
     
     InitializeGame ->
       ( { model
-        | mission = 1
+        | players = initPlayers model.name
+        , mission = 1
         , round = 1
         , voteTrack = 1
         , missionOutcomes = []
@@ -316,17 +340,18 @@ update msg model =
 
     AssignRoles ( firstTraitor :: otherTraitor ) ->
       let
-        traitorIndexes : List Int
-        traitorIndexes = firstTraitor :: if [ firstTraitor ] == otherTraitor then [ firstTraitor + 1 ] else otherTraitor
+        traitorIds : List Int
+        traitorIds = 
+          firstTraitor :: if [ firstTraitor ] == otherTraitor then [ firstTraitor + 1 ] else otherTraitor
       
       in
         ( 
           { model
-          | isTraitor = List.member 0 traitorIndexes
+          | isTraitor = List.member 0 traitorIds
           , players =
             List.indexedMap
-            ( \playerIndex player ->
-              { player | isTraitor = List.member playerIndex traitorIndexes }
+            ( \id player ->
+              { player | isTraitor = List.member id traitorIds }
             )
             model.players
           , mission = 1
@@ -342,34 +367,23 @@ update msg model =
         , Cmd.none
       )
     
-    SelectTeamMember playerIndex ->
+    SelectTeamMember playerId ->
       let
         finishedSelection : Bool
         finishedSelection = getTeamSize model.players == ( getMaxTeamSize model.mission ) - 1
         
         isPlayerInTeam : Bool
-        isPlayerInTeam = List.member 0 ( List.map .index ( List.filter .selected model.players ) )
+        isPlayerInTeam = List.any ( \player -> player.id == 0 ) ( List.filter .selected model.players )
       
       in
         (
-          if not finishedSelection || isPlayerInTeam
-          then
-            { model 
-            | players = 
-              List.map 
-              ( \player -> if player.index == playerIndex then { player | selected = True } else player ) 
-              model.players
-            , round = if finishedSelection then 2 else 1
-            }
-          else
-            ( assignOutcomes
-              model
-              ( model.players
-                |> List.map ( \player -> if player.index == playerIndex then { player | selected = True } else player )
-                |> List.filter .selected
-                |> List.map ( \player -> aiChooseMissionOutcome player.index model )
-              )
-            )
+          { model 
+          | players = 
+            List.map 
+            ( \player -> if player.id == playerId then { player | selected = True } else player ) 
+            model.players
+          , round = if finishedSelection then 2 else 1
+          }
         , Cmd.none
         )
     
@@ -378,61 +392,64 @@ update msg model =
         votes : List Bool
         votes = vote ::
           ( model.players
-            |> List.filter ( \player -> player.index > 0 )
-            |> List.map ( \player -> aiVoteTeam model.leader player.index model.players )
+            |> List.filter ( \player -> player.id > 0 )
+            |> List.map ( \player -> aiVoteTeam model.leader player.id model.players model.missionOutcomes )
           )
         
         success : Bool
-        success = ( List.sum << List.map ( \currentVote -> if currentVote then 1 else 0 ) ) votes > ( toFloat ( List.length votes ) / 2 )
+        success = 
+          toFloat ( ( List.length << List.filter ( \currentVote -> currentVote ) ) votes )
+          >= ( toFloat ( List.length votes ) / 2 )
+        
+        newPlayers : List Player
+        newPlayers =
+          List.map2
+          ( \playerVote player ->
+            { player
+            | vote = playerVote
+            , suspicions = if playerVote then player.suspicions else player.suspicions + 1
+            }
+          )
+          votes
+          model.players
+        
+        newModel : Model
+        newModel =
+          { model
+          | players = newPlayers
+          , teamAllowed = success
+          , voteTrack = if not success then model.voteTrack + 1 else 1
+          }
         
         isPlayerInTeam : Bool
         isPlayerInTeam = 
           model.players
           |> List.filter .selected
-          |> List.map .index
+          |> List.map .id
           |> List.member 0
       
       in
         ( 
-          if not success || isPlayerInTeam
+          if isPlayerInTeam
           then
-            { model
-            | players =
-                List.map2
-                ( \playerVote player ->
-                  { player
-                  | vote = playerVote
-                  , suspicions = if playerVote then player.suspicions else player.suspicions + 1
-                  }
-                )
-                votes
-                model.players
-            , teamAllowed = success
-            , round = if success then 4 else 3
-            , voteTrack = if not success then model.voteTrack + 1 else 1
-            }
+            { newModel | round = if success then 4 else 3 }
           else
             assignOutcomes
-            { model
-            | players = List.map2 ( \playerVote player -> { player | vote = playerVote } ) votes model.players
-            , teamAllowed = True
-            , round = 1
-            , voteTrack = 1
-            }
+            newModel
             ( model.players
               |> List.filter ( \player -> player.selected )
-              |> List.map ( \player -> aiChooseMissionOutcome player.index model )
+              |> List.map ( \player -> aiChooseMissionOutcome player.id model )
             )
         , Cmd.none
         )
     
-    ChooseTraitor suspicionIndex -> 
+    ChooseSuspect suspicionId -> 
       let
-        suspicionIndexes : List Int
-        suspicionIndexes = suspicionIndex ::
+        suspicionIds : List Int
+        suspicionIds = suspicionId ::
           ( model.players
-            |> List.filter ( \player -> player.index > 0 )
-            |> List.map ( \player -> aiChoosePossibleTraitor player.index model.players )
+            |> List.filter ( \player -> player.id > 0 )
+            |> List.map ( \player -> aiChoosePossibleTraitor player.id model.players )
           )
         
         nextLeader : Int
@@ -445,8 +462,8 @@ update msg model =
         ( { model 
           | players =
               if nextLeader == 0
-              then updateSuspicions model.players suspicionIndexes
-              else aiAssignTeam nextLeader nextMission ( updateSuspicions model.players suspicionIndexes )
+              then updateSuspicions model.players suspicionIds
+              else aiAssignTeam nextLeader nextMission ( updateSuspicions model.players suspicionIds )
           , mission = nextMission
           , leader = nextLeader
           , round = if nextLeader == 0 then 1 else 2
@@ -461,8 +478,8 @@ update msg model =
         model
         ( outcome ::
           ( model.players
-            |> List.filter ( \player -> player.index > 0 && player.selected )
-            |> List.map ( \player -> aiChooseMissionOutcome player.index model )
+            |> List.filter ( \player -> player.id > 0 && player.selected )
+            |> List.map ( \player -> aiChooseMissionOutcome player.id model )
           )
         )
       , Cmd.none
@@ -548,7 +565,7 @@ showTeamScreen model =
           ( 
             (
               String.concat 
-              ( List.map .name ( List.filter ( \player -> player.index == model.leader ) model.players ) )
+              ( List.map .name ( List.filter ( \player -> player.id == model.leader ) model.players ) )
             ) ++ " is the current leader."
           )
         ]
@@ -596,16 +613,16 @@ showMissionStatus model =
 showTeamMembers : Model -> List (Html Msg)
 showTeamMembers model =
   List.indexedMap 
-  ( \index player -> div [ classes "dib ma4 ba ph2 w-10" ] 
-    [ h3 [ classes "f4" ] [ text ( if index == 0 then model.name else player.name ) ]
-    , if model.leader == index then span []
+  ( \id player -> div [ classes "dib ma4 ba ph2 w-10" ] 
+    [ h3 [ classes "f4" ] [ text ( if id == 0 then model.name else player.name ) ]
+    , if model.leader == id then span []
         [ p [ classes "fw5" ] [ i [ classes "fa fa-star gold" ] [], text " Leader" ] ]
       else p [ classes "white" ] [ text "-" ]
     , if player.selected
       then p [] [ i [ classes "fa fa-group green" ] [], text " selected" ]
       else
         if model.round == 1 && model.leader == 0 && getTeamSize model.players < getMaxTeamSize model.mission
-        then button [ classes "db mv2 center", onClick ( SelectTeamMember index ) ] [ text "Select" ]
+        then button [ classes "db mv2 center", onClick ( SelectTeamMember id ) ] [ text "Select" ]
         else p [ classes "white" ] [ text "-" ]
     , if model.round == 3 || model.round == 4
       then p [] [ text ( if player.vote then "Vote: Agreed" else "Vote: Disagreed" ) ]
@@ -614,9 +631,9 @@ showTeamMembers model =
       then p [ classes "gray" ] [ text "hidden traitor" ]
       else p [ classes "white" ] [ text "-" ]
     , if model.round == 3
-      then button [ classes "db mv2 center", onClick ( ChooseTraitor index ) ] [ text "Accuse" ]
+      then button [ classes "db mv2 center", onClick ( ChooseSuspect id ) ] [ text "Accuse" ]
       else span [] []
-    , if model.round == 1 && player.accuses /= -1
+    , if ( model.round == 1 || model.round == 2 ) && player.accuses /= -1
       then div []
         [ div [] [ text "Accuses:" ]
         , div []
@@ -625,7 +642,7 @@ showTeamMembers model =
             ( String.concat
               ( List.map 
                 .name
-                ( List.filter ( \accusedPlayer -> player.accuses == accusedPlayer.index ) model.players )
+                ( List.filter ( \accusedPlayer -> player.accuses == accusedPlayer.id ) model.players )
               )
             )
           ]

@@ -6,6 +6,7 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onInput, onClick)
 import Random
+import Set
 import Debug
 
 
@@ -60,16 +61,18 @@ initPlayers playerName =
   , { id = 2, name = "Robert", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
   , { id = 3, name = "Jennifer", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
   , { id = 4, name = "David", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { id = 5, name = "Lisa", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
+  , { id = 6, name = "George", isTraitor = False, selected = False, vote = False, failedMissions = 0, accuses = -1, suspicions = 0 }
   ]
 
 
-showRoundText : Int -> String
-showRoundText round =
+showRoundText : Int -> Int -> String
+showRoundText mission round =
   case round of
     1 -> "Who will you take with you on your mission?"
-    2 -> "Vote on the selected team."
-    3 -> "Do you wish to point out a possible traitor?"
-    4 -> "Choose your mission outcome."
+    2 -> ("Vote on the selected team. " ++ if mission == 4 then "This mission 4 requires 2 fails to fail." else "" )
+    3 -> "Choose a traitor suspect. All players will remember this."
+    4 -> ("Choose your mission outcome. " ++ if mission == 4 then "This mission 4 requires 2 fails to fail." else "" )
     _ -> "Something went wrong, game ended."
 
 
@@ -78,9 +81,9 @@ getMaxTeamSize mission =
   case mission of
     1 -> 2
     2 -> 3
-    3 -> 2
-    4 -> 3
-    5 -> 3
+    3 -> 3
+    4 -> 4
+    5 -> 4
     _ -> 3
 
 
@@ -99,10 +102,32 @@ getPlayer playerId players =
 aiAssignTeam : Int -> Int -> List Player -> List Player
 aiAssignTeam leader mission players =
   let
+    isTraitor : Bool
+    isTraitor =
+      players
+      |> List.map ( \player -> if player.id == leader then player.isTraitor else False )
+      |> List.member True
+    
+    otherTraitorId : Int
+    otherTraitorId =
+      players
+      |> List.filter ( \player -> player.id /= leader && player.isTraitor )
+      |> List.map ( \player -> player.id )
+      |> List.head
+      |> Maybe.withDefault 0
+    
     team : List Int
     team =
       players
-      |> List.sortBy ( \player -> if player.id == leader then -1 else player.suspicions )
+      |> List.sortBy
+        ( \player -> 
+          if player.id == leader 
+          then -1 
+          else
+            if isTraitor && mission == 4 && player.id == otherTraitorId
+            then -1
+            else player.suspicions
+        )
       |> List.take ( getMaxTeamSize mission )
       |> List.map .id
    
@@ -127,9 +152,15 @@ aiVoteTeam leader playerId players missionOutcomes =
     hasFailedMissions : Bool
     hasFailedMissions = List.any ( \player -> player.failedMissions > 0 ) selectedPlayers
     
-    teamAverageSuspicions : Float
-    teamAverageSuspicions = 
-      ( toFloat << List.sum << List.map .suspicions ) selectedPlayers / ( toFloat << List.length ) selectedPlayers
+    highestTeamSuspicion : Float
+    highestTeamSuspicion = 
+      selectedPlayers
+      |> List.sortBy .suspicions
+      |> List.map .suspicions
+      |> List.reverse
+      |> List.head
+      |> Maybe.withDefault 0
+      |> toFloat
     
     groupAverageSuspicions : Float
     groupAverageSuspicions = 
@@ -137,22 +168,30 @@ aiVoteTeam leader playerId players missionOutcomes =
   
   in
     if not isTraitor || List.length ( List.filter ( \outcome -> outcome ) missionOutcomes ) < 2
-    then
-      playerId == leader 
-      || not hasFailedMissions 
-      || ( teamAverageSuspicions <= groupAverageSuspicions )
+    then True
     else
-      False
+      if isTraitor && List.length ( List.filter ( \player -> player.selected && player.isTraitor ) players ) < 2
+      then False
+      else
+        if
+          playerId == leader 
+          || not hasFailedMissions 
+          || ( highestTeamSuspicion <= groupAverageSuspicions )
+        then True
+        else False
 
-aiChoosePossibleTraitor : Int -> List Player -> Int
-aiChoosePossibleTraitor playerId players =
-  players
-  |> List.filter ( \player -> player.id /= playerId )
-  |> List.sortBy .failedMissions
-  |> List.map .id
-  |> List.reverse
-  |> List.head
-  |> Maybe.withDefault 0
+
+aiChoosePossibleTraitor : List Player -> List Int
+aiChoosePossibleTraitor players =
+    players
+    |> List.append players
+    |> List.append players
+    |> List.filter ( \player -> player.selected )
+    |> List.reverse
+    |> List.map2 ( \index player -> ( index, player.id ) ) ( List.range 0 24 )
+    |> List.filter ( \( index, id ) -> index /= id )
+    |> List.map ( \( index, id ) -> id )
+    |> List.take ( List.length players - 1 )
 
 
 updateSuspicions : List Player -> List Int -> List Player
@@ -189,16 +228,21 @@ aiChooseMissionOutcome playerId model =
       ( toFloat << List.sum << List.map .suspicions ) model.players / ( toFloat << List.length ) model.players
   
   in
-    if not isTraitor || model.mission == 1
-    then True
+    if isTraitor && model.mission == 1 && model.isAggressiveRound
+    then False
     else
-      if model.mission == 5
-      then False
+      if not isTraitor || model.mission == 1
+      then True
       else
-        if model.mission > 2 && ( List.length << List.filter ( \outcome -> outcome ) ) model.missionOutcomes == 2
+        if model.mission == 5
         then False
         else
-          (model.mission == 4) || ( numberOfSuspicions < averageGroupSuspicions )
+          if model.mission > 3 && ( List.length << List.filter ( \outcome -> outcome ) ) model.missionOutcomes < 2
+          then False
+          else
+            if ( numberOfSuspicions < averageGroupSuspicions )
+            then False
+            else True
 
 
 updatePlayerOutcomes : Bool -> List Player -> List Player
@@ -215,8 +259,8 @@ updatePlayerOutcomes success players =
         if not player.selected 
         then player.suspicions
         else
-          if success then player.suspicions - 2 else player.suspicions + 2
-    , selected = False
+          if not success then  player.suspicions + 2 else if player.suspicions - 2 < 0 then 0 else player.suspicions - 2
+    , selected = if success then False else player.selected
     }
   )
   players
@@ -226,7 +270,8 @@ assignOutcomes : Model -> List Bool -> Model
 assignOutcomes model outcomes =
   let
     success : Bool
-    success = ( List.length << List.filter ( \currentOutcome -> currentOutcome == False ) ) outcomes == 0
+    success = 
+      ( List.length << List.filter ( \currentOutcome -> currentOutcome == False ) ) outcomes < ( if model.mission == 4 then 2 else 1 )
     
     nextLeader : Int
     nextLeader = if model.leader + 1 >= List.length model.players then 0 else model.leader + 1
@@ -234,11 +279,11 @@ assignOutcomes model outcomes =
   in
     { model 
       | players =
-          if nextLeader == 0
+          if not success || nextLeader == 0
           then updatePlayerOutcomes success model.players
           else aiAssignTeam nextLeader ( model.mission + 1 ) ( updatePlayerOutcomes success model.players )
       , mission = model.mission + 1
-      , leader = nextLeader
+      , leader = if success then nextLeader else model.leader
       , round = if not success then 3 else if nextLeader == 0 then 1 else 2
       , missionOutcomes = model.missionOutcomes ++ [ success ]
     }
@@ -266,6 +311,7 @@ hasPlayerWon model =
 type alias Model =
   { name: String
   , isTraitor: Bool
+  , isAggressiveRound: Bool
   , players: List Player
   , mission: Int
   , round: Int
@@ -279,6 +325,7 @@ init : () -> (Model, Cmd Msg)
 init _ =
   ( Model
     "Player"
+    False
     False
     ( initPlayers "Player" )
     0
@@ -297,6 +344,7 @@ init _ =
 type Msg
   = EnterName String
   | InitializeGame
+  | AssignAggression Int
   | AssignRoles (List Int)
   | AssignLeader Int
   | SelectTeamMember Int
@@ -330,7 +378,14 @@ update msg model =
         , voteTrack = 1
         , missionOutcomes = []
         }
-      , Random.generate AssignRoles (Random.list 2 (Random.int 0 4))
+      , Random.generate AssignAggression (Random.int 0 1)
+      )
+    
+    AssignAggression isAggressive ->
+      ( { model
+        | isAggressiveRound = if isAggressive == 1 then True else False
+        }
+      , Random.generate AssignRoles (Random.list 3 (Random.int 0 6))
       )
 
     AssignRoles [] ->
@@ -338,13 +393,7 @@ update msg model =
       , Cmd.none
       )
 
-    AssignRoles ( firstTraitor :: otherTraitor ) ->
-      let
-        traitorIds : List Int
-        traitorIds = 
-          firstTraitor :: if [ firstTraitor ] == otherTraitor then [ firstTraitor + 1 ] else otherTraitor
-      
-      in
+    AssignRoles traitorIds ->
         ( 
           { model
           | isTraitor = List.member 0 traitorIds
@@ -356,7 +405,9 @@ update msg model =
             model.players
           , mission = 1
           }
-        , Random.generate AssignLeader (Random.int 0 4)
+        , if Set.size ( Set.fromList traitorIds ) < 3
+          then Random.generate AssignRoles (Random.list 3 (Random.int 0 6))
+          else Random.generate AssignLeader (Random.int 0 4)
         )
     
     AssignLeader leader ->
@@ -446,17 +497,18 @@ update msg model =
     ChooseSuspect suspicionId -> 
       let
         suspicionIds : List Int
-        suspicionIds = suspicionId ::
-          ( model.players
-            |> List.filter ( \player -> player.id > 0 )
-            |> List.map ( \player -> aiChoosePossibleTraitor player.id model.players )
-          )
+        suspicionIds = suspicionId :: ( aiChoosePossibleTraitor model.players )
+        --suspicionIds = suspicionId ::
+        --  ( model.players
+        --    |> List.filter ( \player -> player.id > 0 )
+        --    |> List.map ( \player -> aiChoosePossibleTraitor player.id model.players )
+        --  )
         
         nextLeader : Int
         nextLeader = if model.leader + 1 >= List.length model.players then 0 else model.leader + 1
         
         nextMission : Int
-        nextMission = if model.voteTrack > 5 then model.mission + 1 else model.mission
+        nextMission = if model.voteTrack == 5 then model.mission + 1 else model.mission
       
       in
         ( { model 
@@ -467,8 +519,8 @@ update msg model =
           , mission = nextMission
           , leader = nextLeader
           , round = if nextLeader == 0 then 1 else 2
-          , voteTrack = if model.voteTrack > 5 then 1 else model.voteTrack
-          , missionOutcomes = if model.voteTrack > 5 then model.missionOutcomes ++ [ False ] else model.missionOutcomes
+          , voteTrack = if model.voteTrack == 5 then 1 else model.voteTrack
+          , missionOutcomes = if model.voteTrack == 5 then model.missionOutcomes ++ [ False ] else model.missionOutcomes
           }
         , Cmd.none
         )
@@ -533,11 +585,11 @@ showScreen model =
 showStartScreen : Model -> Html Msg
 showStartScreen model =
   div []
-    [ h1 [ classes "f2 fw3" ] [ text "Welcome to Avalon" ]
-    , p [ classes "" ] [ text "a game of trust and betrayal" ]
-    , label [ classes "mr3" ] [ text "Enter your name:" ]
-    , input [ placeholder "Player", value model.name, onInput EnterName ] []
-    , div [ classes "ma3" ] [ button [ onClick InitializeGame ] [ text "Start" ] ]
+    [ h1 [ classes "f2 fw3 mb0 orange" ] [ text "Welcome to Avalon" ]
+    , p [ classes "mt0 mb4 black-80" ] [ text "a game of trust and betrayal" ]
+    , label [ classes "mr3 dark-blue" ] [ text "Enter your name:" ]
+    , input [ classes" bg-white ba b--black black pa2 bg-washed-yellow", placeholder "Player", value model.name, onInput EnterName ] []
+    , div [ classes "ma3" ] [ button [ classes "bg-white ba b--black black pv2 ph3 bw1 br3 bg-lightest-blue pointer", onClick InitializeGame ] [ text "Start" ] ]
     ]
 
 
@@ -546,44 +598,49 @@ showTeamScreen model =
   div []
     ( 
       List.append
-      [ h1 [ classes "f2 fw3" ] [ text ( "Mission " ++ String.fromInt model.mission ++ " out of 5" ) ]
+      [ showMissionStatus model
       , if model.isTraitor
         then div []
-          [ p [ classes "red fw7" ] [ text "You are a traitor. You can see the other traitors." ]
-          , p [] [ text "Fail the majority of missions to win this game. Try to not to be suspected as traitor." ]
+          [ p [ classes "light-red fw7 mb0" ] [ text "You are a traitor. You can see the other traitors." ]
+          , p [ classes "gray mt0" ] [ text "Fail the majority of missions to win this game. Try to not to be suspected as traitor." ]
           ]
         else
           div [] 
-            [ p [ classes "dark-green fw7" ] [ text "You are loyal." ]
-            , p [] [ text "Succeed the majority of missions to win this game. Beware of 2 hidden traitors." ]
+            [ p [ classes "green fw7 mb0" ] [ text "You are loyal." ]
+            , p [ classes "gray mt0" ] [ text "Succeed the majority of missions to win this game. Beware of 2 hidden traitors." ]
             ]
-      , showMissionStatus model
-      , p [] [ text ( "The next mission will fail if the team can't agree on a team in 5 vote rounds." ) ]
-      , p [] [ text ( "Vote round " ++ String.fromInt model.voteTrack ++ " out of 5." ) ]
-      , p [ classes "cb" ] 
-        [ text
-          ( 
-            (
-              String.concat 
-              ( List.map .name ( List.filter ( \player -> player.id == model.leader ) model.players ) )
-            ) ++ " is the current leader."
+      , p []
+        ( List.append
+          [ text "Voting round: " ]
+          ( List.map 
+            ( \round -> 
+              span [] 
+                [ i [ classes ( "fa fa-" ++ if round > model.voteTrack then "circle black-20" else if round < model.voteTrack then "times red" else "circle yellow" ) ] []
+                , span [] [ text " " ] 
+                ]
+            ) 
+            ( List.range 1 5 )
           )
-        ]
-      , p [ classes "fw8 mt4" ] [ text ( showRoundText model.round ) ]
+        )
+      , p [ classes "fw8 mt4" ] [ text ( showRoundText model.mission model.round ) ]
       , if model.round == 2
         then div []
-          [ button [ classes "ma2", onClick ( Vote True ) ] [ text "Agree" ]
-          , button [ classes "ma2", onClick ( Vote False ) ] [ text "Disagree" ]
+          [ button [ classes "ma2 bg-white ba b--black pv2 ph3 bw1 br3 bg-lightest-blue pointer", style "font-size" "40px", onClick ( Vote True ) ] 
+              [ i [ classes "fa fa-thumbs-up green" ] [] ]
+          , button [ classes "ma2 bg-white ba b--black pv2 ph3 bw1 br3 bg-lightest-blue pointer", style "font-size" "40px", onClick ( Vote False ) ] 
+              [ i [ classes "fa fa-thumbs-down red" ] [] ]
           ]
         else span [] []
       , if model.round == 4
         then div []
-          [ button [ classes "ma2", onClick ( ChooseOutcome True ) ] [ text "Success!" ]
-          , button [ classes "ma2", onClick ( ChooseOutcome False ) ] [ text "Fail!" ]
+          [ button [ classes "ma2 bg-white ba b--black pv2 ph3 bw1 br3 bg-lightest-blue pointer", style "font-size" "40px", onClick ( ChooseOutcome True ) ] 
+              [ i [ classes "fa fa-check green" ] [] ]
+          , button [ classes "ma2 bg-white ba b--black pv2 ph3 bw1 br3 bg-lightest-blue pointer", style "font-size" "40px", onClick ( ChooseOutcome False ) ] 
+              [ i [ classes "fa fa-times red" ] [] ]
           ]
         else span [] []
       ]
-      ( showTeamMembers model )
+      [ div [ classes "center", style "max-width" "800px" ] ( showTeamMembers model ) ]
     )
 
 
@@ -592,7 +649,11 @@ showEndScreen model =
   div []
     [ h1 [] [ text ( if hasPlayerWon model then "Congratulations! You have won!" else "You have lost." ) ]
     , showMissionStatus model
-    , div [ classes "ma3" ] [ button [ onClick InitializeGame ] [ text "New Game" ] ]
+    , div [ classes "ma3" ] 
+        [ button 
+          [ classes "bg-white ba b--black black pv2 ph3 bw1 br3 bg-lightest-blue pointer", onClick InitializeGame ] 
+          [ text "New Game" ] 
+        ]
     ]
 
 
@@ -601,37 +662,72 @@ showMissionStatus model =
   div 
   []
   ( List.indexedMap 
-    ( \missionIndex outcome -> div [ classes "dib ma3 ba ph2" ] 
-      [ h3 [ classes "f5" ] [ text ( "Mission " ++ String.fromInt ( missionIndex + 1 ) ) ]
-      , p [ classes ( if outcome then "dark-green" else "red") ] 
-          [ text ( if outcome then "Success" else "Fail" ) ]
-      ]
+    ( \missionIndex outcome -> 
+      div 
+        [ classes 
+            ( "dib ma3 ba ph2 bg-washed-" ++ 
+              if missionIndex < model.mission
+              then
+                if model.mission - 1 == missionIndex 
+                then "yellow shadow-1" 
+                else 
+                  if outcome 
+                  then "green" 
+                  else "red"
+              else ""
+            ) 
+        ] 
+        [ h3 [ classes "f5" ] [ text ( "Mission " ++ String.fromInt ( missionIndex + 1 ) ) ]
+        , p [ classes ( if outcome then "dark-green" else "red") ] 
+            [ if missionIndex < model.mission - 1
+              then
+                if outcome
+                then i [ classes "fa fa-check green", style "font-size" "40px" ] []
+                else i [ classes "fa fa-times red", style "font-size" "40px" ] []
+              else span [ classes "white", style "font-size" "40px" ] [ text "-" ]
+            ]
+        ]
     ) 
-    model.missionOutcomes
+    ( List.append model.missionOutcomes ( List.repeat ( 5 - List.length model.missionOutcomes ) False ) )
   )
+  
+getMemberColor : Player -> Int -> String
+getMemberColor player leaderId =
+  if player.id == leaderId then "bg-light-yellow"
+  else if player.selected then "bg-light-yellow"
+  else "bg-washed-green"
 
 showTeamMembers : Model -> List (Html Msg)
 showTeamMembers model =
   List.indexedMap 
-  ( \id player -> div [ classes "dib ma4 ba ph2 w-10" ] 
-    [ h3 [ classes "f4" ] [ text ( if id == 0 then model.name else player.name ) ]
+  ( \id player -> 
+    div 
+    [ classes ( String.concat [ "relative dib ma4 ba ph2 w-10 ", ( getMemberColor player model.leader ) ] ), style "min-width" "120px" ] 
+    [ h3 [ classes "f4 black-80" ] [ text ( if id == 0 then model.name else player.name ) ]
     , if model.leader == id then span []
-        [ p [ classes "fw5" ] [ i [ classes "fa fa-star gold" ] [], text " Leader" ] ]
+        [ p [ classes "fw5" ] [ text " Leader" ] ]
       else p [ classes "white" ] [ text "-" ]
     , if player.selected
-      then p [] [ i [ classes "fa fa-group green" ] [], text " selected" ]
+      then p [ style "font-size" "40px", classes "mv1" ]
+        [ if model.leader == id then i [ classes "fa fa-flag gold" ] [] else span [] []
+        , span [] [ text " " ]
+        , i [ classes "fa fa-check-circle-o green", style "font-size" "40px" ] []
+        ]
       else
         if model.round == 1 && model.leader == 0 && getTeamSize model.players < getMaxTeamSize model.mission
-        then button [ classes "db mv2 center", onClick ( SelectTeamMember id ) ] [ text "Select" ]
-        else p [ classes "white" ] [ text "-" ]
+        then button [ classes "db mv2 center bg-white ba b--black pv2 ph3 bw1 br3 bg-lightest-blue pointer", onClick ( SelectTeamMember id ) ] [ i [ classes "fa fa-check-circle-o green", style "font-size" "40px" ] [] ]
+        else p [ style "font-size" "40px", classes "mv1 white" ] [ text "-" ]
     , if model.round == 3 || model.round == 4
-      then p [] [ text ( if player.vote then "Vote: Agreed" else "Vote: Disagreed" ) ]
+      then
+        if player.vote
+        then p [ style "font-size" "21px" ] [ text "Vote: ", i [ classes "fa fa-thumbs-up green" ] [] ]
+        else p [ style "font-size" "21px" ] [ text "Vote: ", i [ classes "fa fa-thumbs-down red" ] [] ]
       else span [] []
     , if model.isTraitor && player.isTraitor
       then p [ classes "gray" ] [ text "hidden traitor" ]
       else p [ classes "white" ] [ text "-" ]
     , if model.round == 3
-      then button [ classes "db mv2 center", onClick ( ChooseSuspect id ) ] [ text "Accuse" ]
+      then button [ classes "db mv2 center bg-white ba b--black black pv2 ph3 bw1 br3 bg-lightest-blue pointer", onClick ( ChooseSuspect id ) ] [ text "Accuse" ]
       else span [] []
     , if ( model.round == 1 || model.round == 2 ) && player.accuses /= -1
       then div []
@@ -648,6 +744,7 @@ showTeamMembers model =
           ]
         ]
       else span [] []
+    --, p [ classes "gray" ] [ text ( "S: " ++ String.fromInt player.suspicions ) ]
     ]
   )
   model.players
